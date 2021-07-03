@@ -87,7 +87,7 @@ Outputs:
     Value: !GetAtt
       - MyEc2
       - PublicIp
-    Condition: IsInDMZ
+    Condition: IsDMZ
   MyEc2PrivateIp:
     Description: "MyEc2 Private IP"
     Value: !GetAtt
