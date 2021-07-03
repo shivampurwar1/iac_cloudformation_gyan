@@ -1,3 +1,4 @@
+AWSTemplateFormatVersion: "2010-09-09"
 Description: "Basic Template to create EC2, install Ansible, setup directory and config files"
 Metadata:
   AWS::CloudFormation::Interface:
@@ -21,7 +22,7 @@ Parameters:
     Type: String
     Default: shared-infrastructure
   InstanceInSubnet:
-    Description: "Define Subent to deploy instances"
+    Description: "Define Subnet to deploy instances"
     Type: String
     Default: "private"
     AllowedValues:
