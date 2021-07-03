@@ -53,7 +53,7 @@ Parameters:
   ParameterEC2KeyName:
     Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
     Type: AWS::EC2::KeyPair::KeyName
-    Default: "shivam-sandbox"
+    Default: "mykey-sandbox"
   CreateOrRestore:
     Description: "Do you want to create or restore controller"
     Type: String
