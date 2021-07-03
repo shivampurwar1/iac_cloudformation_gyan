@@ -1,0 +1,156 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Template for Setting up EC2 on Public and Private subnet. Private instance with role attached."
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Parent Stacks"
+        Parameters:
+          - ParentStackName
+          - InstanceInAz
+      -
+        Label:
+          default: "EC2 Configuration"
+        Parameters:
+          - ParameterEC2InstanceType
+          - ParameterEC2KeyName
+Parameters:
+  ParentStackName:
+    Description: "Add Stack Name to refer Networking related values"
+    Type: String
+    Default: shared-infrastructure
+  InstanceInAz:
+    Description: "Define AZ to deploy instances"
+    Type: String
+    Default: "az1"
+    AllowedValues:
+    - "az1"
+    - "az2"
+    - "az3"
+  ParameterEC2InstanceType:
+    Description: "Select EC2 Instance type from Predefined Values"
+    Type: String
+    Default: "t2.micro"
+    AllowedValues:
+    - "t2.micro"
+    - "t3.micro"
+    - "t3.small"
+  ParameterEC2KeyName:
+    Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "shivam-sandbox"
+Mappings:
+  MappingsRegionAMI:
+    us-east-1:
+      AMI: ami-0ab4d1e9cf9a1215a
+    ap-south-1:
+      AMI: ami-0bcf5425cdc1d8a85
+Resources:
+  JB:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-dmzsg"
+        - Fn::ImportValue: !Sub "${ParentStackName}-shareddmzsg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-dmz${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum install nc -y
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ JB, !Ref "AWS::StackName" ] ]
+  PrivateEc2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-privatesg"
+        - Fn::ImportValue: !Sub "${ParentStackName}-sharedprivatesg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-private${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum install nc -y
+      IamInstanceProfile: !Ref PrivateEc2InstanceProfile
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ "PrivateInstance", !Ref "AWS::StackName" ] ]
+  PrivateEc2Role:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Tags:
+          - "Key": "Name"
+            "Value": !Join [ "-", [ "PrivateEc2Role", !Ref "AWS::StackName" ] ]
+  PrivateEc2RolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Join [ "-", [ "s3-access-policy", !Ref "AWS::StackName" ] ]
+      PolicyDocument: {
+        "Version": "2012-10-17",
+        "Statement": [
+        {
+          "Effect": "Allow",
+          "Action": [
+            "s3:*",
+            "ec2:DescribePrefixLists",
+            "ssm:*"
+          ],
+          "Resource": "*"
+        }
+        ]
+      }
+      Roles:
+        -
+          Ref: "PrivateEc2Role"
+  PrivateEc2InstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: !Join [ "-", [ "PrivateEc2InstanceProfile", !Ref "AWS::StackName" ] ]
+      Path: /
+      Roles:
+        - !Ref PrivateEc2Role
+Outputs:
+  JBPublicIp:
+    Description: "JB Public IP"
+    Value: !GetAtt
+      - JB
+      - PublicIp
+  JBPtivateIp:
+    Description: "JB Private IP"
+    Value: !GetAtt
+      - JB
+      - PrivateIp
+  PrivateInstanceIP:
+    Description: "PrivateInstance Private IP"
+    Value: !GetAtt
+      - PrivateEc2
+      - PrivateIp
