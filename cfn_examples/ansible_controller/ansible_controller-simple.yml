@@ -1,0 +1,95 @@
+Description: "Basic Template to create EC2 and install Ansible"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Parent Stacks"
+        Parameters:
+          - ParentStackName
+          - InstanceInSubnet
+          - InstanceInAz
+      -
+        Label:
+          default: "EC2 Configuration"
+        Parameters:
+          - ParameterEC2InstanceType
+          - ParameterEC2KeyName
+Parameters:
+  ParentStackName:
+    Description: "Add Stack Name to refer Networking related values"
+    Type: String
+    Default: shared-infrastructure
+  InstanceInSubnet:
+    Description: "Define Subent to deploy instances"
+    Type: String
+    Default: "private"
+    AllowedValues:
+    - "dmz"
+    - "private"
+  InstanceInAz:
+    Description: "Define AZ to deploy instances"
+    Type: String
+    Default: "az1"
+    AllowedValues:
+    - "az1"
+    - "az2"
+    - "az3"
+  ParameterEC2InstanceType:
+    Description: "Select EC2 Instance type from Predefined Values"
+    Type: String
+    Default: "t2.micro"
+    AllowedValues:
+    - "t2.micro"
+    - "t3.micro"
+    - "t3.small"
+  ParameterEC2KeyName:
+    Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "mykey-sandbox"
+Conditions:
+    IsDMZ: !Equals 
+      - !Ref InstanceInSubnet
+      - dmz
+Mappings:
+  MappingsRegionAMI:
+    us-east-1:
+      AMI: ami-0ab4d1e9cf9a1215a
+    ap-south-1:
+      AMI: ami-0bcf5425cdc1d8a85
+Resources:
+  AnsibleController:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}sg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum install pip -y
+          pip install ansible
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ "AnsibleController", !Ref "AWS::StackName" ] ]
+Outputs:
+  AnsibleControllerPublicIp:
+    Description: "AnsibleController IP"
+    Value: !GetAtt
+      - AnsibleController
+      - PublicIp
+    Condition: IsDMZ
+  AnsibleControllerPtivateIp:
+    Description: "AnsibleController Private IP"
+    Value: !GetAtt
+      - AnsibleController
+      - PrivateIp
