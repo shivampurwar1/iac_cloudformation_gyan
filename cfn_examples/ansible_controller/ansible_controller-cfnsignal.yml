@@ -151,7 +151,7 @@ Resources:
             04_sync_any_existing_data:
               command: aws s3 sync s3://iac-team/ansible /opt/ansible
             05_setting_cron:
-              command: sudo su ; echo -e "*/15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\"" > /tmp/mycrontab.txt  ; sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
+              command: sudo su ; echo -e "*/15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\" --delete" > /tmp/mycrontab.txt  ; sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
   AnsibleControllerRestored:
     Type: AWS::EC2::Instance
     Condition: IsRestore
@@ -207,7 +207,7 @@ Resources:
             04_sync_any_existing_data:
               command: aws s3 sync s3://iac-team/ansible /opt/ansible
             05_setting_cron:
-              command: sudo su ; echo -e "*/15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\"" > /tmp/mycrontab.txt  ; sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
+              command: sudo su ; echo -e "*/15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\" --delete" > /tmp/mycrontab.txt  ; sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
       IamInstanceProfile: !Ref AnsibleControllerInstanceProfile
       Tags:
         - "Key": "Name"
@@ -255,7 +255,8 @@ Resources:
                 "s3:PutObject",
                 "s3:GetObject",
                 "s3:PutObjectAcl",
-                "s3:GetObjectVersion"
+                "s3:GetObjectVersion",
+                "s3:DeleteObject"
             ],
             "Resource": [
                 "arn:aws:s3:::iac-team/ansible/*"
