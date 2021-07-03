@@ -1,0 +1,85 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "To test crontab inside ec2 userdata"
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Parent Stacks"
+        Parameters:
+          - ParentStackName
+          - InstanceInAz
+      -
+        Label:
+          default: "EC2 Configuration"
+        Parameters:
+          - ParameterEC2InstanceType
+          - ParameterEC2KeyName
+Parameters:
+  ParentStackName:
+    Description: "Add Stack Name to refer Networking related values"
+    Type: String
+    Default: shared-infrastructure
+  InstanceInAz:
+    Description: "Define AZ to deploy instances"
+    Type: String
+    Default: "az1"
+    AllowedValues:
+    - "az1"
+    - "az2"
+    - "az3"
+  ParameterEC2InstanceType:
+    Description: "Select EC2 Instance type from Predefined Values"
+    Type: String
+    Default: "t2.micro"
+    AllowedValues:
+    - "t2.micro"
+    - "t3.micro"
+    - "t3.small"
+  ParameterEC2KeyName:
+    Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "mykey-sandbox"
+Mappings:
+  MappingsRegionAMI:
+    us-east-1:
+      AMI: ami-0ab4d1e9cf9a1215a
+    ap-south-1:
+      AMI: ami-0bcf5425cdc1d8a85
+Resources:
+  MyEc2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-dmzsg"
+        - Fn::ImportValue: !Sub "${ParentStackName}-shareddmzsg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-dmz${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum install nc -y
+          sudo su
+          echo -e "#15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\"" > /tmp/mycrontab.txt
+          sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ MyEc2, !Ref "AWS::StackName" ] ]
+Outputs:
+  MyEc2PublicIp:
+    Description: "MyEc2 Public IP"
+    Value: !GetAtt
+      - MyEc2
+      - PublicIp
+    Description: "MyEc2 Private IP"
+    Value: !GetAtt
+      - MyEc2
+      - PrivateIp
