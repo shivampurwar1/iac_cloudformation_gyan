@@ -115,7 +115,7 @@ Resources:
           echo -e "[defaults]\ninventory = ./server-inventory\nremote_user = ec2-user\nprivate_key_file = ~/.ssh/ansible.pem\nhost_key_checking = False\nretry_files_enabled = False" > ansible.cfg
           aws s3 sync s3://iac-team/ansible /opt/ansible
           sudo su
-          echo -e "15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\"" > /tmp/mycrontab.txt
+          echo -e "15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\" --delete" > /tmp/mycrontab.txt
           sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
       IamInstanceProfile: !Ref AnsibleControllerInstanceProfile
       Tags:
@@ -144,7 +144,7 @@ Resources:
           pip install ansible
           aws s3 sync s3://iac-team/ansible /opt/ansible
           sudo su
-          echo -e "15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\"" > /tmp/mycrontab.txt
+          echo -e "15 * * * * aws s3 sync /opt/ansible s3://iac-team/ansible --exclude \"*.retry\" --delete" > /tmp/mycrontab.txt
           sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
       IamInstanceProfile: !Ref AnsibleControllerInstanceProfile
       Tags:
@@ -193,7 +193,8 @@ Resources:
                 "s3:PutObject",
                 "s3:GetObject",
                 "s3:PutObjectAcl",
-                "s3:GetObjectVersion"
+                "s3:GetObjectVersion",
+                "s3:DeleteObject"
             ],
             "Resource": [
                 "arn:aws:s3:::iac-team/ansible/*"
