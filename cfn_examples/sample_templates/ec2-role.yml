@@ -7,6 +7,7 @@ Metadata:
           default: "Parent Stacks"
         Parameters:
           - ParentStackName
+          - InstanceInSubnet
           - InstanceInAz
       -
         Label:
@@ -19,6 +20,13 @@ Parameters:
     Description: "Add Stack Name to refer Networking related values"
     Type: String
     Default: shared-infrastructure
+  InstanceInSubnet:
+    Description: "Define Subnet to deploy instances"
+    Type: String
+    Default: "private"
+    AllowedValues:
+    - "dmz"
+    - "private"
   InstanceInAz:
     Description: "Define AZ to deploy instances"
     Type: String
@@ -39,6 +47,10 @@ Parameters:
     Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
     Type: AWS::EC2::KeyPair::KeyName
     Default: "mykey-sandbox"
+Conditions:
+    IsDMZ: !Equals 
+      - !Ref InstanceInSubnet
+      - dmz
 Mappings:
   MappingsRegionAMI:
     us-east-1:
@@ -56,10 +68,9 @@ Resources:
         - !Ref AWS::Region
         - AMI
       SecurityGroupIds:
-        - Fn::ImportValue: !Sub "${ParentStackName}-dmzsg"
-        - Fn::ImportValue: !Sub "${ParentStackName}-shareddmzsg"
+        - Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}sg"
       SubnetId:
-        Fn::ImportValue: !Sub "${ParentStackName}-dmz${InstanceInAz}subnet"
+        Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}${InstanceInAz}subnet"
       KeyName: !Ref ParameterEC2KeyName
       UserData:
         'Fn::Base64':
@@ -148,6 +159,7 @@ Outputs:
     Value: !GetAtt
       - MyEc2
       - PublicIp
+    Condition: IsDMZ
   MyEc2PtivateIp:
     Description: "MyEc2 Private IP"
     Value: !GetAtt
