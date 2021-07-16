@@ -77,8 +77,8 @@ Resources:
           !Sub |
           #!/bin/bash -xe
           yum -y install nc wget unzip
-          wget -P /tmp -c https://releases.hashicorp.com/terraform/0.12.29/terraform_0.12.29_linux_amd64.zip
-          unzip /tmp/terraform_0.12.29_linux_amd64.zip -d /bin/
+          wget -P /tmp -c https://releases.hashicorp.com/terraform/1.0.2/terraform_1.0.2_linux_amd64.zip
+          unzip /tmp/terraform_1.0.2_linux_amd64.zip -d /bin/
       IamInstanceProfile: !Ref TerraformControllerProfile
       Tags:
         - "Key": "Name"
@@ -109,7 +109,7 @@ Resources:
         {
           "Effect": "Allow",
           "Action": [
-                                  "ec2:*",
+              "ec2:*",
           ],
           "Resource": "*"
         }
