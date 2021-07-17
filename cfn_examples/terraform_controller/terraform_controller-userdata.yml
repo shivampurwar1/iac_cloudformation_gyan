@@ -1,0 +1,264 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Template to setup terraform controller with create/restore option. Backup data at S3."
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      -
+        Label:
+          default: "Parent Stacks"
+        Parameters:
+          - ParentStackName
+          - InstanceInSubnet
+          - InstanceInAz
+      -
+        Label:
+          default: "EC2 Configuration"
+        Parameters:
+          - ParameterEC2InstanceType
+          - ParameterEC2KeyName
+          - ParameterTerraformVersion
+      -
+        Label:
+          default: "Create/Restore"
+        Parameters:
+          - CreateOrRestore
+          - S3ForBackupRestore
+Parameters:
+  ParentStackName:
+    Description: "Add Stack Name to refer Networking related values"
+    Type: String
+    Default: shared-infrastructure
+  InstanceInSubnet:
+    Description: "Define Subent to deploy instances"
+    Type: String
+    Default: "private"
+    AllowedValues:
+    - "dmz"
+    - "private"
+  InstanceInAz:
+    Description: "Define AZ to deploy instances"
+    Type: String
+    Default: "az1"
+    AllowedValues:
+    - "az1"
+    - "az2"
+    - "az3"
+  ParameterEC2InstanceType:
+    Description: "Select EC2 Instance type from Predefined Values"
+    Type: String
+    Default: "t2.micro"
+    AllowedValues:
+    - "t2.micro"
+    - "t3.micro"
+    - "t3.small"
+  ParameterEC2KeyName:
+    Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
+    Type: AWS::EC2::KeyPair::KeyName
+    Default: "mykey-sandbox"
+  ParameterTerraformVersion:
+    Description: "Define Terraform version"
+    Type: String
+    Default: "1.0.2"
+    AllowedValues:
+    - "1.0.2"
+    - "1.0.0"
+  CreateOrRestore:
+    Description: "Do you want to create or restore controller"
+    Type: String
+    Default: "restore"
+    AllowedValues:
+    - "create"
+    - "restore"
+  S3ForBackupRestore:
+    Description: "S3 name for keeping/restoring Terraform data"
+    Type: String
+    Default: "iac-team"
+Conditions:
+    IsDMZ: !Equals 
+      - !Ref InstanceInSubnet
+      - dmz
+    IsCreate: !Equals
+      - !Ref CreateOrRestore
+      - create
+    IsRestore: !Equals
+      - !Ref CreateOrRestore
+      - restore
+    IsCreatedInDMZ: !And
+      - !Condition IsCreate
+      - !Condition IsDMZ
+    IsRestoredInDMZ: !And
+      - !Condition IsRestore
+      - !Condition IsDMZ
+Mappings:
+  MappingsRegionAMI:
+    us-east-1:
+      AMI: ami-0ab4d1e9cf9a1215a
+    ap-south-1:
+      AMI: ami-0bcf5425cdc1d8a85
+Resources:
+  TerraformController:
+    Type: AWS::EC2::Instance
+    Condition: IsCreate
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}sg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum -y install nc wget unzip
+          wget -P /tmp -c https://releases.hashicorp.com/terraform/${ParameterTerraformVersion}/terraform_${ParameterTerraformVersion}_linux_amd64.zip
+          unzip /tmp/terraform_${ParameterTerraformVersion}_linux_amd64.zip -d /bin/
+          mkdir -p /opt/terraform/configs
+          aws s3 sync s3://iac-team/terraform /opt/terraform
+          sudo su
+          echo -e "15 * * * * aws s3 sync /opt/terraform s3://iac-team/terraform --exclude \"*.terraform\"" > /tmp/mycrontab.txt
+          sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
+      IamInstanceProfile: !Ref TerraformControllerInstanceProfile
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ "TerraformController", !Ref "AWS::StackName" ] ]
+  TerraformControllerRestored:
+    Type: AWS::EC2::Instance
+    Condition: IsRestore
+    Properties:
+      InstanceType: !Ref ParameterEC2InstanceType
+      ImageId:
+        Fn::FindInMap:
+        - MappingsRegionAMI
+        - !Ref AWS::Region
+        - AMI
+      SecurityGroupIds:
+        - Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}sg"
+      SubnetId:
+        Fn::ImportValue: !Sub "${ParentStackName}-${InstanceInSubnet}${InstanceInAz}subnet"
+      KeyName: !Ref ParameterEC2KeyName
+      UserData:
+        'Fn::Base64':
+          !Sub |
+          #!/bin/bash -xe
+          yum -y install nc wget unzip
+          wget -P /tmp -c https://releases.hashicorp.com/terraform/${ParameterTerraformVersion}/terraform_${ParameterTerraformVersion}_linux_amd64.zip
+          unzip /tmp/terraform_${ParameterTerraformVersion}_linux_amd64.zip -d /bin/
+          aws s3 sync s3://iac-team/terraform /opt/terraform
+          sudo su
+          echo -e "15 * * * * aws s3 sync /opt/terraform s3://iac-team/terraform --exclude \"*.terraform\"" > /tmp/mycrontab.txt
+          sudo -u ec2-user bash -c 'crontab /tmp/mycrontab.txt'
+      IamInstanceProfile: !Ref TerraformControllerInstanceProfile
+      Tags:
+        - "Key": "Name"
+          "Value": !Join [ "-", [ "TerraformController", !Ref "AWS::StackName" ] ]
+  TerraformControllerRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Tags:
+          - "Key": "Name"
+            "Value": !Join [ "-", [ "TerraformControllerRole", !Ref "AWS::StackName" ] ]
+  TerraformControllerRolePolicies:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: !Join [ "-", [ "s3-access-policy", !Ref "AWS::StackName" ] ]
+      PolicyDocument: {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ListBucket",
+            "Effect": "Allow",
+            "Action": "s3:ListBucket",
+            "Resource": [
+                "arn:aws:s3:::iac-team"
+            ],
+            "Condition": {
+                "StringLike": {
+                    "s3:prefix": "terraform/*"
+                }
+            }
+        },
+        {
+            "Sid": "DownloadandUpload",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject",
+                "s3:GetObject",
+                "s3:PutObjectAcl",
+                "s3:GetObjectVersion"
+            ],
+            "Resource": [
+                "arn:aws:s3:::iac-team/terraform/*"
+            ]
+        },
+        {
+            "Sid": "KMSAccess",
+            "Effect": "Allow",
+            "Action": [
+                "kms:Decrypt",
+                "kms:GenerateDataKey"
+            ],
+            "Resource": [
+                "arn:aws:kms:*::key/*"
+            ]
+        },
+        {
+            "Sid": "Terraform",
+            "Effect": "Allow",
+            "Action": [
+                "ec2:*",
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+      Roles:
+        -
+          Ref: "TerraformControllerRole"
+  TerraformControllerInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      InstanceProfileName: !Join [ "-", [ "TerraformControllerInstanceProfile", !Ref "AWS::StackName" ] ]
+      Path: /
+      Roles:
+        - !Ref TerraformControllerRole
+Outputs:
+  TerraformControllerPublicIp:
+    Description: "TerraformController IP"
+    Value: !GetAtt
+      - TerraformController
+      - PublicIp
+    Condition: IsCreatedInDMZ
+  TerraformControllerPtivateIp:
+    Description: "TerraformController Private IP"
+    Value: !GetAtt
+      - TerraformController
+      - PrivateIp
+    Condition: IsCreate
+  TerraformControllerRestoredPublicIp:
+    Description: "TerraformController IP"
+    Value: !GetAtt
+      - TerraformControllerRestored
+      - PublicIp
+    Condition: IsRestoredInDMZ
+  TerraformControllerRestoredPtivateIp:
+    Description: "TerraformController Private IP"
+    Value: !GetAtt
+      - TerraformControllerRestored
+      - PrivateIp
+    Condition: IsRestore
