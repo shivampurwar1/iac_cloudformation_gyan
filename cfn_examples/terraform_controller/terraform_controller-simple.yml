@@ -15,6 +15,7 @@ Metadata:
         Parameters:
           - ParameterEC2InstanceType
           - ParameterEC2KeyName
+          - ParameterTerraformVersion
 Parameters:
   ParentStackName:
     Description: "Add Stack Name to refer Networking related values"
@@ -47,6 +48,13 @@ Parameters:
     Description: "Name of an Existing EC2 KeyPair to enable SSH to EC2"
     Type: AWS::EC2::KeyPair::KeyName
     Default: "mykey-sandbox"
+  ParameterTerraformVersion:
+    Description: "Define Terraform version"
+    Type: String
+    Default: "1.0.2"
+    AllowedValues:
+    - "1.0.2"
+    - "1.0.0"
 Conditions:
     IsDMZ: !Equals 
       - !Ref InstanceInSubnet
@@ -77,8 +85,8 @@ Resources:
           !Sub |
           #!/bin/bash -xe
           yum -y install nc wget unzip
-          wget -P /tmp -c https://releases.hashicorp.com/terraform/1.0.2/terraform_1.0.2_linux_amd64.zip
-          unzip /tmp/terraform_1.0.2_linux_amd64.zip -d /bin/
+          wget -P /tmp -c https://releases.hashicorp.com/terraform/${ParameterTerraformVersion}/terraform_${ParameterTerraformVersion}_linux_amd64.zip
+          unzip /tmp/terraform_${ParameterTerraformVersion}_linux_amd64.zip -d /bin/
       IamInstanceProfile: !Ref TerraformControllerProfile
       Tags:
         - "Key": "Name"
